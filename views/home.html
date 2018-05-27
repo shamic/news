@@ -1,0 +1,630 @@
+{% extends "base2.html" %} {% block main %}
+
+<link rel="stylesheet" href="/static/css/fileinput.css">
+<script src="/static/js/fileinput.js"></script>
+<script src="/static/js/locales/zh.js"></script>
+<script src="/static/js/vue.min.js"></script>
+
+<script>
+    $(function () {
+
+        var bean = JSON.parse(localStorage.getItem('bean'));
+        var _pageSize = 20;
+        // console.log(JSON.stringify(bean));
+
+        var vm = new Vue({
+            el: '#product-list',
+            data: {
+                books: [],
+                pageItems: [],
+                currentPage: 1,
+                editedBookCopy: {},
+                editedBook: {},
+                postData: null,
+                bookFile: '',
+                bookImg: '',
+                thumbnailChanged: true,
+                txtFileChanged: true
+            },
+            methods: {
+                isDate: function (str) {
+                    var reg = /^(\d{4})-(\d{2})-(\d{2})$/;
+                    if (str == '') {
+                        return false;
+                    }
+                    var arr = reg.exec(str);
+
+                    if (!reg.test(str) || parseInt(RegExp.$2) >= 12 || parseInt(RegExp.$3) >= 31) {
+                        return false;
+                    }
+                    return true;
+                },
+
+                resetEditData: function () {
+                    this.editedBookCopy = {};
+                    this.postData = null;
+                    this.bookFile = '';
+                    this.bookImg = '';
+                    this.thumbnailChanged = true;
+                    this.txtFileChanged = true;
+                },
+
+                showError: function (tips) {
+                    $('#myAlert').show();
+                    $('#myAlert')[0].innerText = tips;
+                    setTimeout(function () {
+                        $('#myAlert').hide();
+                    }, 3000)
+                },
+
+                sendForm: function (postData) {
+                    var that = this;
+                    if (that.thumbnailChanged && that.txtFileChanged) {
+                        if (that.bookFile.length == 0 || that.bookImg.length == 0) {
+                            return;
+                        }
+                    }
+                    if (that.thumbnailChanged && that.bookImg.length == 0) {
+                        return;
+                    }
+                    if (that.txtFileChanged && that.bookFile.length == 0) {
+                        return;
+                    }
+
+                    // AJAX提交JSON:
+                    if (that.thumbnailChanged) {
+                        vm.postData.thumbnail_url = vm.bookImg;
+                    }
+                    if (that.txtFileChanged) {
+                        vm.postData.txt_url = vm.bookFile;
+                    }
+                    $.ajax({
+                        type: 'post',
+                        headers: {
+                            'Authorization': 'Bearer ' + bean.token
+                        },
+                        dataType: 'json',
+                        contentType: 'application/json',
+                        url: '/api/editBook',
+                        data: JSON.stringify(vm.postData)
+                    }).done(function (res) {
+                        $('#myLoading').hide();
+                        $('#updateBookBtn').attr('disabled', false);
+                        $('#editBookModal').modal('hide');
+
+                        if (res.code == 0) {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text('更新成功！');
+                            for (var attr in that.editedBook) {
+                                that.editedBook[attr] = that.editedBookCopy[attr];
+                                if (attr == 'thumbnail_url'  && that.thumbnailChanged) {
+                                    that.editedBook[attr] = '/images/' + vm.bookImg;
+                                }
+                                if (attr == 'txt_url'  && that.txtFileChanged) {
+                                    that.editedBook[attr] = vm.bookFile;
+                                }
+                            }
+                        } else {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text(res.msg);
+                        }
+                        that.resetEditData();
+                    }).fail(function (jqXHR, textStatus) {
+                        // Not 200:
+                        $('#myLoading').hide();
+                        $('#updateBookBtn').attr('disabled', false);
+                        $('#editBookModal').modal('hide');
+                        that.resetEditData();
+                        alert('Error: ' + jqXHR.status);
+                    });
+                },
+
+                editBook: function (book) {
+                    var that = this;
+                    that.editedBook = book;
+                    var editObj = JSON.parse(JSON.stringify(book));
+                    if (!editObj) {
+                        return;
+                    }
+                    var typeDesc = '小说';
+                    if (editObj.type == 2) {
+                        typeDesc = '听书';
+                    }
+                    if (editObj.type == 3) {
+                        typeDesc = '杂志';
+                    }
+                    if (editObj.type == 4) {
+                        typeDesc = '漫画';
+                    }
+                    if (editObj.type == 5) {
+                        typeDesc = '资讯';
+                    }
+                    editObj.typeDesc = typeDesc;
+                    that.editedBookCopy = editObj;
+                    $('#thumbnail').fileinput('refresh', { msgPlaceholder: editObj.thumbnail_url.substring(8) });
+                    $('#txtFile').fileinput('refresh', { msgPlaceholder: editObj.txt_url });
+
+                    $('#editBookModal').modal('show');
+                },
+
+                updateBook: function () {
+                    var that = this;
+                    var isChange = false;
+                    for (var attr in that.editedBook) {
+                        if (that.editedBookCopy[attr] != that.editedBook[attr]) {
+                            isChange = true;
+                            break;
+                        }
+                    }
+                    if (!isChange) {
+                        that.showError('没有修改项！')
+                        return;
+                    }
+
+                    if ($('#category').val() == '请选择...') {
+                        $('#category').css("border-color", "red");
+                    }
+                    if ($('#book_type').val() == '请选择...') {
+                        $('#book_type').css("border-color", "red");
+                    }
+                    if ($('#publisher_date').val().length > 0 && !vm.isDate($('#publisher_date').val())) {
+                        that.showError('时间格式不正确，格式如：2018-02-26')
+                    }
+                    if ($('#thumbnail').val() == '') {
+                        that.thumbnailChanged = false;
+                    }
+                    if ($('#txtFile').val() == '') {
+                        that.txtFileChanged = false;
+                    }
+
+                    $('#myLoading').show();
+                    $('#updateBookBtn').attr('disabled', true);
+                    vm.postData = {
+                        bookId: that.editedBookCopy.id,
+                        name: that.editedBookCopy.name,
+                        author: that.editedBookCopy.author,
+                        introduction: that.editedBookCopy.introduction,
+                        category: that.editedBookCopy.category,
+                        type: that.editedBookCopy.type
+                    };
+                    var publisher = that.editedBookCopy.publisher;
+                    var publisherDate = that.editedBookCopy.publisher_date;
+                    var wordsNum = that.editedBookCopy.words_num;
+
+                    if (publisher && publisher.length > 0) {
+                        vm.postData.publisher = publisher;
+                    }
+                    if (publisherDate && publisherDate.length > 0) {
+                        vm.postData.publisher_date = publisherDate;
+                    }
+                    if (wordsNum && wordsNum.length > 0) {
+                        vm.postData.words_num = wordsNum;
+                    }
+
+                    if (that.thumbnailChanged) {
+                        $('#thumbnail').fileinput('upload');
+                    }
+                    if (that.txtFileChanged) {
+                        $('#txtFile').fileinput('upload');
+                    }
+                    if (!that.thumbnailChanged && !that.txtFileChanged) {
+                        vm.sendForm(vm.postData);
+                    }
+                },
+
+                deleteBook: function (id) {
+                    var that = this;
+                    if (!id) {
+                        return;
+                    }
+                    var params = { bookId: id };
+                    $.ajax({
+                        type: 'post',
+                        headers: {
+                            'Authorization': 'Bearer ' + bean.token
+                        },
+                        dataType: 'json',
+                        contentType: 'application/json',
+                        url: '/api/deleteBook',
+                        data: JSON.stringify(params)
+                    }).done(function (res) {
+                        if (res.code == 0) {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text('删除成功！');
+                            var deleteBookId = res.data;
+                            var i;
+                            for (i = 0; i < that.books.length; i++) {
+                                if (that.books[i].id === deleteBookId) {
+                                    that.books.splice(i, 1);
+                                    return;
+                                }
+                            }
+                        } else {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text(res.msg);
+                        }
+                    }).fail(function (jqXHR, textStatus) {
+                        // Not 200:
+                        alert('Error: ' + jqXHR.status);
+                    });
+                },
+
+                changePage: function (pageItem) {
+                    if (pageItem.class == 'page-item disabled') {
+                        return;
+                    }
+                    if (pageItem.desc == '上一页') {
+                        this.currentPage--;
+                    } else if (pageItem.desc == '下一页') {
+                        this.currentPage++;
+                    } else if (pageItem.desc == '...') {
+                        this.currentPage = 10;
+                    } else {
+                        this.currentPage = parseInt(pageItem.desc);
+                    }
+                    // console.log('🌹🌹CurrentPage is ' + this.currentPage);
+                    this.getBooks(this.currentPage - 1);
+                },
+
+                getBooks: function (page) {
+                    $.ajax({
+                        type: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + bean.token
+                        },
+                        dataType: 'json',
+                        contentType: 'application/json',
+                        url: '/api/books',
+                        data: JSON.stringify({
+                            start: page * _pageSize,
+                            pageSize: _pageSize
+                        })
+                    }).done(function (res) {
+                        if (res.code == 0) {
+                            res.data.rows.map(element => {
+                                if (element.thumbnail_url.indexOf('http') < 0) {
+                                    element.thumbnail_url = '/images/' + element.thumbnail_url;
+                                }
+                            });
+                            vm.books = [];
+                            vm.books = res.data.rows;
+                            vm.pageItems = [];
+                            var pages = Math.ceil(res.data.count / _pageSize);
+                            if (pages > 1) {
+                                for (var i = 0; i < pages + 2; i++) {
+                                    var item = { class: 'page-item', desc: i.toString() };
+                                    if (i == 0) {
+                                        item.class = 'page-item';
+                                        item.desc = '上一页';
+                                    }
+                                    if (i == pages + 1) {
+                                        item.class = 'page-item';
+                                        item.desc = '下一页';
+                                    }
+                                    if (i == page + 1) { // 当前页
+                                        item.class = 'page-item disabled';
+                                    }
+                                    vm.pageItems.push(item);
+                                }
+                                if (1 == page + 1) { // 当前页是第一页
+                                    vm.pageItems[0].class = 'page-item disabled';
+                                }
+                                if (pages == page + 1) { // 当前页是最后一页
+                                    vm.pageItems[vm.pageItems.length - 1].class = 'page-item disabled';
+                                }
+                                if (pages > 15) {
+                                    vm.pageItems[11].desc = '...';
+                                    vm.pageItems.splice(12, pages + 2 - 12 - 3);
+                                }
+                            }
+                        } else {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text(res.msg);
+                        }
+                    }).fail(function (jqXHR, textStatus) {
+                        alert('Error: ' + jqXHR.status);
+                    });
+                }
+            }
+        });
+
+        // vm.getBooks(0);
+
+        $('#myModel').on('hidden.bs.modal', function (e) {
+            var modal_body_text = $('#myModel').find('.modal-body')[0].innerText;
+            if (modal_body_text == '删除成功！') {
+
+            } else if (modal_body_text == '认证失败' || modal_body_text == 'token is undefined') {
+                window.location.href = '/login';
+            } else {
+
+            }
+        });
+
+        $("#book_type").change(function () {
+            $('#book_type').css("border-color", "");
+            if ($('#book_type').val() == '小说' || $('#book_type').val() == '请选择...') {
+                vm.editedBookCopy.type = 1;
+            } else if ($('#book_type').val() == '听书') {
+                vm.editedBookCopy.type = 2;
+            } else if ($('#book_type').val() == '杂志') {
+                vm.editedBookCopy.type = 3;
+            } else if ($('#book_type').val() == '漫画') {
+                vm.editedBookCopy.type = 4;
+            } else if ($('#book_type').val() == '资讯') {
+                vm.editedBookCopy.type = 5;
+            }
+        });
+
+        $('#txtFile').fileinput({
+            showUpload: false,
+            previewFileType: 'any',
+            showPreview: false,
+            language: 'zh',
+            browseLabel: '浏览...',
+            uploadUrl: 'uploadFile',
+            browseClass: 'btn btn-outline-secondary',
+            removeClass: 'btn btn-danger',
+            allowedFileTypes: ['text'], // 限制文件类型为图片
+            allowedFileExtensions: ['text'], // 限制文件后缀名为['image', 'html', 'text', 'video', 'audio', 'flash', 'object']
+            maxFileCount: 1,  // 限制最多3张图片
+            // maxFileSize: 1024, // 限制图片大小，最大1024KB
+            // allowedPreviewTypes: ['image'], // 允许预览的文件类型
+            initialCaption: '添加图书txt文件', // 初始化说明框框，比如该项目上默认显示：可以选择最多3张图片，格式为png或者jpg，大小不超过1M
+            layoutTemplates: {
+                main1: '{preview}\n' +
+                    '<div class="input-group {class}">\n' +
+                    '   <div class="input-group-prepend">\n' +
+                    '       {browse}\n' +
+                    '       {remove}\n' +
+                    '   </div>\n' +
+                    '   {caption}\n' +
+                    '</div>',
+                footer: '<div class="file-thumbnail-footer">\n' +
+                    '    <div class="file-caption-name">{caption}{size}</div>\n' +
+                    '</div>'
+            }
+        });
+        $('#txtFile').on('filecleared', function (event) {
+            $('#txtFile').fileinput('refresh', { msgPlaceholder: '添加图书txt文件' });
+        });
+        $('#txtFile').on('fileerror', function (event, data, msg) {
+            console.log(JSON.stringify(data) + '🌹🌹🌹🌹🌹' + JSON.stringify(msg));
+        });
+        $('#txtFile').on('change', function(event) {
+            console.log("txtFile change");
+            vm.editedBookCopy.txt_url = 'changed';
+        });
+        $('#txtFile').on('fileuploaded', function (event, data, previewId, index) {
+            console.log('🌹🌹fileuploaded🌹🌹' + JSON.stringify(data.response));
+            vm.bookFile = data.response.data;
+            vm.sendForm(vm.postData);
+        });
+
+        $('#thumbnail').fileinput({
+            showUpload: false,
+            previewFileType: 'any',
+            showPreview: false,
+            uploadUrl: 'uploadFile',
+            language: 'zh',
+            browseLabel: '浏览...',
+            browseClass: 'btn btn-outline-secondary',
+            removeClass: 'btn btn-danger',
+            allowedFileTypes: ['image'], // 限制文件类型为图片
+            allowedFileExtensions: ['image'], // 限制文件后缀名为['image', 'html', 'text', 'video', 'audio', 'flash', 'object']
+            maxFileCount: 1,  // 限制最多3张图片
+            // maxFileSize: 1024, // 限制图片大小，最大1024KB
+            // allowedPreviewTypes: ['image'], // 允许预览的文件类型
+            initialCaption: '添加图书图片', // 初始化说明框框，比如该项目上默认显示：可以选择最多3张图片，格式为png或者jpg，大小不超过1M
+            layoutTemplates: {
+                main1: '{preview}\n' +
+                    '<div class="input-group {class}">\n' +
+                    '   <div class="input-group-prepend">\n' +
+                    '       {browse}\n' +
+                    '       {remove}\n' +
+                    '   </div>\n' +
+                    '   {caption}\n' +
+                    '</div>',
+                footer: '<div class="file-thumbnail-footer">\n' +
+                    '    <div class="file-caption-name">{caption}{size}</div>\n' +
+                    '</div>'
+            }
+        });
+        $('#thumbnail').on('filecleared', function (event) {
+            $('#thumbnail').fileinput('refresh', { msgPlaceholder: '添加图书图片' });
+        });
+        $('#thumbnail').on('fileerror', function (event, data, msg) {
+            console.log(JSON.stringify(data) + '🌹🌹🌹🌹🌹' + JSON.stringify(msg));
+        });
+        $('#thumbnail').on('change', function(event) {
+            console.log("thumbnail change");
+            vm.editedBookCopy.thumbnail_url = 'changed';
+        });
+        $('#thumbnail').on('fileuploaded', function (event, data, previewId, index) {
+            console.log("🌹🌹fileuploaded🌹🌹" + JSON.stringify(data.response));
+            vm.bookImg = data.response.data;
+            vm.sendForm(vm.postData);
+        });
+    });
+</script>
+
+<div class="container-fluid">
+    <div class="row">
+        <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+            <div class="sidebar-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">
+                            <span data-feather="home"></span>
+                            书库
+                            <span class="sr-only">(current)</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/addBook">
+                            <span data-feather="file"></span>
+                            新建
+                        </a>
+                    </li>
+                    <!-- <li class="nav-item">
+                        <a class="nav-link" href="/addArchive">
+                            <span data-feather="archive"></span>
+                            新建资讯
+                        </a>
+                    </li> -->
+                </ul>
+            </div>
+        </nav>
+
+        <main id="product-list" role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
+            <h1 style="margin-bottom: 20px;">书库</h1>
+            <!-- <nav class="navbar navbar-light justify-content-between" style="background-color: #e3f2fd;">
+                <a class="navbar-brand">Navbar</a>
+                <form class="form-inline">
+                    <input class="form-control mr-sm-2" type="search" placeholder="Search" aria-label="Search">
+                    <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
+                </form>
+            </nav> -->
+            <div class="table-responsive" style="border-bottom: 1px solid #dee2e6;margin-bottom: 30px;">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width:150px;border-bottom: 0;border-top: 0;">图书封面</th>
+                            <th style="border-bottom: 0;border-top: 0;">图书信息</th>
+                            <th style="width:100px;border-bottom: 0;border-top: 0;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="p in books">
+                            <td style="position: relative;">
+                                <img class="media-object" style="width:100px;padding: 10px 10px;position: absolute;top: 50%;transform: translateY(-50%);"
+                                    v-bind:src="p.thumbnail_url">
+                            </td>
+                            <td>
+                                <h2 class="media-heading" v-text="p.name"></h2>
+                                <p>
+                                    <span v-text="p.author"></span>
+                                    <span>|</span>
+                                    <span v-text="p.category">
+                                </p>
+                                <p v-text="p.introduction" style="color:silver; word-break: break-all;overflow: hidden;text-overflow: ellipsis;display: -webkit-box;-webkit-line-clamp: 3;-webkit-box-orient: vertical;"></p>
+                            </td>
+                            <td style="position: relative;">
+                                <!-- <p style="font-size:2em; color:red;height:auto;position: absolute;top: 50%;transform: translateY(-50%);">
+                                    <span v-text="p.rating"></span>
+                                    <span v-if="p.rating" style="font-size:14px;">分
+                                </p> -->
+                                <p class="btn-group" role="group" aria-label="operate" style="position: absolute;top: 50%;transform: translateY(-50%);">
+                                    <button type="button" class="btn btn-link btn-sm" v-on:click="editBook(p)" v-if="p.type != 5">编辑</button>
+                                    <button type="button" class="btn btn-link btn-sm" v-on:click="deleteBook(p.id)">删除</button>
+                                </p>
+                            </td>
+                            <td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-end">
+                    <li v-for="item in pageItems" v-bind:class="item.class" v-on:click="changePage(item)">
+                        <a class="page-link" v-text="item.desc"></a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="modal fade bd-example-modal-lg" id="editBookModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"
+                aria-hidden="true">
+                <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">编辑</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert" id="myAlert" style="display: none;">
+                                哎呀，出错了！
+                            </div>
+                            <form id="product-form">
+                                <div class="form-row">
+                                    <div class="form-group col-md-6">
+                                        <label class="col-form-label">书名</label>
+                                        <input v-model="editedBookCopy.name" type="text" maxlength="100" name="name" class="form-control" placeholder="书名" value=""
+                                            required>
+                                    </div>
+                                    <div class="form-group col-md-6">
+                                        <label class="col-form-label">作者</label>
+                                        <input v-model="editedBookCopy.author" type="text" maxlength="100" name="author" class="form-control" placeholder="作者" value=""
+                                            required>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group col-md-4">
+                                        <label class="col-form-label">出版社(可选)</label>
+                                        <input v-model="editedBookCopy.publisher" type="text" maxlength="100" name="publisher" class="form-control" placeholder="出版社"
+                                            value="">
+                                    </div>
+                                    <div class="form-group col-md-4">
+                                        <label class="col-form-label">出版时间(可选)</label>
+                                        <input v-model="editedBookCopy.publisher_date" type="text" maxlength="10" id='publisher_date' name="publisher_date" class="form-control"
+                                            placeholder="例：2018-02-26" value="">
+                                    </div>
+                                    <div class="form-group col-md-4">
+                                        <label class="col-form-label">字数(可选)</label>
+                                        <input v-model="editedBookCopy.words_num" type="text" maxlength="11" name="words_num" class="form-control" placeholder="字数"
+                                            value="" onkeyup="value=value.replace(/[^\d]/g,'')">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group col-md-6">
+                                        <label for="category" class="col-form-label">分类</label>
+                                        <select v-model="editedBookCopy.category" class="form-control" id="category">
+                                            <option disabled value="">请选择...</option>
+                                            <option>科幻武侠</option>
+                                            <option>历史小说</option>
+                                            <option>经济管理</option>
+                                            <option>人物传记</option>
+                                            <option>青春言情</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group col-md-6">
+                                        <label for="book_type" class="col-form-label">类型</label>
+                                        <select v-model="editedBookCopy.typeDesc" class="form-control" id="book_type">
+                                            <option disabled value="">请选择...</option>
+                                            <option>小说</option>
+                                            <option>听书</option>
+                                            <!-- <option>杂志</option>
+                                            <option>漫画</option>
+                                            <option>资讯</option> -->
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="thumbnail" class="col-form-label">封面图片</label>
+                                    <input type="file" class="form-control-file" name="file" id="thumbnail" accept="image/*">
+                                </div>
+                                <div class="form-group">
+                                    <label for="txtFile" class="col-form-label">图书txt文件</label>
+                                    <input type="file" class="form-control-file" name="file" id="txtFile" accept=".txt">
+                                </div>
+                                <div class="form-group">
+                                    <label class="col-form-label">简介</label>
+                                    <textarea v-model="editedBookCopy.introduction" class="form-control" maxlength="500" placeholder="字数最多500" style="resize: vertical;"
+                                        id="introduction" rows="3" required></textarea>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">关闭</button>
+                            <button type="button" id="updateBookBtn" class="btn btn-primary" v-on:click="updateBook()">更新</button>
+                            <img id="myLoading" src="../static/images/loading.gif" style="display: none;height: 30px;width: 30px;margin-left: 10px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+{% endblock %}

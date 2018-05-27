@@ -1,0 +1,436 @@
+{% extends "base2.html" %} {% block main %}
+
+<link rel="stylesheet" href="/static/css/fileinput.css">
+
+<script type="text/javascript" src="../static/js/summernote-bs4.min.js"></script>
+<script type="text/javascript" src="../static/lang/summernote-zh-CN.min.js"></script>
+
+<script src="/static/js/fileinput.js"></script>
+<script src="/static/js/locales/zh.js"></script>
+<script src="/static/js/vue.min.js"></script>
+
+<script>
+    $(function () {
+
+        var bean = JSON.parse(localStorage.getItem('bean'));
+        $.ajax({
+            type: 'post',
+            headers: {
+                'Authorization': 'Bearer ' + bean.token
+            },
+            dataType: 'json',
+            contentType: 'application/json',
+            url: '/api/checkAuth'
+        }).done(function (res) {
+            if (res.code != 0) {
+                $('#myModel').modal('show');
+                $('#myModel').find('.modal-body').text(res.msg);
+            }
+        }).fail(function (jqXHR, textStatus) {
+            alert('Error: ' + jqXHR.status);
+        });
+
+        var vm = new Vue({
+            el: '#product-list',
+            data: {
+                postData: null,
+                bookFile: '',
+                bookImg: ''
+            },
+            methods: {
+                isDate: function (str) {
+                    var reg = /^(\d{4})-(\d{2})-(\d{2})$/;
+                    if (str == '') {
+                        return false;
+                    }
+                    var arr = reg.exec(str);
+
+                    if (!reg.test(str) || parseInt(RegExp.$2) >= 12 || parseInt(RegExp.$3) >= 31) {
+                        return false;
+                    }
+                    return true;
+                },
+
+                sendForm: function (postData) {
+                    var that = this;
+                    if ($('#book_type').val() == '资讯') {
+                        if (that.bookImg.length == 0) {
+                            return;
+                        }
+                    } else {
+                        if (that.bookFile.length == 0 || that.bookImg.length == 0) {
+                            return;
+                        }
+                    }
+
+                    // AJAX提交JSON:
+                    vm.postData.thumbnail_url = vm.bookImg;
+                    vm.postData.txt_url = vm.bookFile;
+                    if ($('#book_type').val() == '资讯') {
+                        vm.postData.htmlText = $('#summernote').summernote('code');
+                    }
+                    $.ajax({
+                        type: 'post',
+                        headers: {
+                            'Authorization': 'Bearer ' + bean.token
+                        },
+                        dataType: 'json',
+                        contentType: 'application/json',
+                        url: '/api/addBook',
+                        data: JSON.stringify(vm.postData)
+                    }).done(function (res) {
+                        if (res.code == 0) {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text('创建成功！');
+                        } else {
+                            $('#myModel').modal('show');
+                            $('#myModel').find('.modal-body').text(res.msg);
+                        }
+                        $('#myLoading').hide();
+                        $('#createBtn').attr('disabled', false);
+                    }).fail(function (jqXHR, textStatus) {
+                        // Not 200:
+                        $('#myLoading').hide();
+                        $('#createBtn').attr('disabled', false);
+                        alert('Error: ' + jqXHR.status);
+                    });
+                }
+            }
+        });
+        
+        $('#myModel').on('hidden.bs.modal', function (e) {
+            var modal_body_text = $('#myModel').find('.modal-body')[0].innerText;
+            if (modal_body_text == '创建成功！') {
+                window.location.href = '/addBook';
+            } else if (modal_body_text == '认证失败') {
+                window.location.href = '/';
+            } else {
+
+            }
+        })
+
+        $("#category").change(function () {
+            $('#category').css("border-color", "");
+        });
+
+        $("#book_type").change(function () {
+            $('#book_type').css("border-color", "");
+            if ($('#book_type').val() == '小说' || $('#book_type').val() == '请选择...') {
+                $('#archive').hide();
+                $('#txtFileForm').show();
+            } else if ($('#book_type').val() == '听书') {
+                $('#archive').hide();
+                $('#txtFileForm').show();
+            } else if ($('#book_type').val() == '杂志') {
+                $('#archive').hide();
+                $('#txtFileForm').show();
+            } else if ($('#book_type').val() == '漫画') {
+                $('#archive').hide();
+                $('#txtFileForm').show();
+            } else if ($('#book_type').val() == '资讯') {
+                $('#txtFileForm').hide();
+                $('#archive').show();
+                $('#summernote').summernote({
+                    placeholder: '资讯内容...',
+                    tabsize: 2,
+                    height: 500,
+                    toolbar: [
+                        ['style', ['style']],
+                        ['font', ['bold', 'underline', 'clear']],
+                        ['fontname', ['fontname']],
+                        ['fontsize', ['fontsize']],
+                        ['color', ['color']],
+                        ['para', ['ul', 'ol', 'paragraph']],
+                        ['table', ['table']],
+                        ['insert', ['link', 'picture', 'video']],
+                        ['view', ['undo', 'redo', 'codeview', 'help']]
+                    ],
+                    lang: 'zh-CN',
+                    callbacks: {
+                        onImageUpload: function (files) {
+                            var $files = $(files);
+                            $files.each(function () {
+                                var file = this;
+                                var data = new FormData();
+                                data.append("file", file);
+                                $.ajax({
+                                    type: "POST",
+                                    url: 'uploadFile',
+                                    cache: false,
+                                    contentType: false,
+                                    processData: false,
+                                    data: data
+                                }).done(function (res) {
+                                    if (res.code == 0) {
+                                        var imageUrl = '../images/' + res.data;
+                                        $('#summernote').summernote('insertImage', imageUrl, function ($image) { });
+                                    } else {
+                                        $('#myModel').modal('show');
+                                        $('#myModel').find('.modal-body').text(res.msg);
+                                    }
+                                }).fail(function (jqXHR, textStatus) {
+                                    alert('Error: ' + jqXHR.status);
+                                });
+                            });
+                        }
+                    }
+                });
+            }
+        });
+
+        $('#product-form').submit(function (e) {
+            e.preventDefault();
+            if ($('#category').val() == '请选择...') {
+                $('#category').css("border-color", "red");
+            } else if ($('#book_type').val() == '请选择...') {
+                $('#book_type').css("border-color", "red");
+            } else if ($('#publisher_date').val().length > 0 && !vm.isDate($('#publisher_date').val())) {
+                $('#myModel').modal('show');
+                $('#myModel').find('.modal-body').text('时间格式不正确，格式如：2018-02-26');
+            } else if ($('#thumbnail').val() == '') {
+                $('#myModel').modal('show');
+                $('#myModel').find('.modal-body').text('请添加图书封面图');
+            } else if ($('#txtFile').val() == '' && $('#book_type').val() != '资讯') {
+                $('#myModel').modal('show');
+                $('#myModel').find('.modal-body').text('请添加图书txt文件');
+            } else if ($('#book_type').val() == '资讯' && $('#summernote').summernote('isEmpty')) {
+                $('#myModel').modal('show');
+                $('#myModel').find('.modal-body').text('资讯内容不能为空');
+            }
+            else {
+                $('#myLoading').show();
+                $('#createBtn').attr('disabled', true);
+                vm.postData = {
+                    name: $(this).find('input[name=name]').val(),
+                    author: $(this).find('input[name=author]').val(),
+                    introduction: $('#introduction').val(),
+                    category: $('#category').val(),
+                    type: $('#book_type').val()
+                };
+                var publisher = $(this).find('input[name=publisher]').val();
+                var publisherDate = $(this).find('input[name=publisher_date]').val();
+                var wordsNum = $(this).find('input[name=words_num]').val();
+
+                if (publisher.length > 0) {
+                    vm.postData.publisher = publisher;
+                }
+                if (publisherDate.length > 0) {
+                    vm.postData.publisher_date = publisherDate;
+                }
+                if (wordsNum.length > 0) {
+                    vm.postData.words_num = wordsNum;
+                }
+                if ($('#book_type').val() != '资讯') {
+                    $('#txtFile').fileinput('upload');
+                }
+                $('#thumbnail').fileinput('upload');
+            }
+        });
+
+        $('#txtFile').fileinput({
+            showUpload: false,
+            previewFileType: 'any',
+            showPreview: false,
+            language: 'zh',
+            browseLabel: '浏览...',
+            uploadUrl: 'uploadFile',
+            browseClass: 'btn btn-outline-secondary',
+            removeClass: 'btn btn-danger',
+            allowedFileTypes: ['text'], // 限制文件类型为图片
+            allowedFileExtensions: ['text'], // 限制文件后缀名为['image', 'html', 'text', 'video', 'audio', 'flash', 'object']
+            maxFileCount: 1,  // 限制最多3张图片
+            // maxFileSize: 1024, // 限制图片大小，最大1024KB
+            // allowedPreviewTypes: ['image'], // 允许预览的文件类型
+            initialCaption: '添加图书txt文件', // 初始化说明框框，比如该项目上默认显示：可以选择最多3张图片，格式为png或者jpg，大小不超过1M
+            layoutTemplates: {
+                main1: '{preview}\n' +
+                    '<div class="input-group {class}">\n' +
+                    '   <div class="input-group-prepend">\n' +
+                    '       {browse}\n' +
+                    '       {remove}\n' +
+                    '   </div>\n' +
+                    '   {caption}\n' +
+                    '</div>',
+                footer: '<div class="file-thumbnail-footer">\n' +
+                    '    <div class="file-caption-name">{caption}{size}</div>\n' +
+                    '</div>'
+            }
+        });
+        $('#txtFile').on('filecleared', function (event) {
+            $('#txtFile').fileinput('refresh', { caption: '添加图书txt文件' });
+        });
+        $('#txtFile').on('fileerror', function (event, data, msg) {
+            console.log(JSON.stringify(data) + '🌹🌹🌹🌹🌹' + JSON.stringify(msg));
+        });
+        $('#txtFile').on('fileuploaded', function (event, data, previewId, index) {
+            console.log('🌹🌹fileuploaded🌹🌹' + JSON.stringify(data.response));
+            vm.bookFile = data.response.data;
+            vm.sendForm(vm.postData);
+        });
+
+        $('#thumbnail').fileinput({
+            showUpload: false,
+            previewFileType: 'any',
+            showPreview: false,
+            uploadUrl: 'uploadFile',
+            language: 'zh',
+            browseLabel: '浏览...',
+            browseClass: 'btn btn-outline-secondary',
+            removeClass: 'btn btn-danger',
+            allowedFileTypes: ['image'], // 限制文件类型为图片
+            allowedFileExtensions: ['image'], // 限制文件后缀名为['image', 'html', 'text', 'video', 'audio', 'flash', 'object']
+            maxFileCount: 1,  // 限制最多3张图片
+            // maxFileSize: 1024, // 限制图片大小，最大1024KB
+            // allowedPreviewTypes: ['image'], // 允许预览的文件类型
+            initialCaption: '添加图书图片', // 初始化说明框框，比如该项目上默认显示：可以选择最多3张图片，格式为png或者jpg，大小不超过1M
+            layoutTemplates: {
+                main1: '{preview}\n' +
+                    '<div class="input-group {class}">\n' +
+                    '   <div class="input-group-prepend">\n' +
+                    '       {browse}\n' +
+                    '       {remove}\n' +
+                    '   </div>\n' +
+                    '   {caption}\n' +
+                    '</div>',
+                footer: '<div class="file-thumbnail-footer">\n' +
+                    '    <div class="file-caption-name">{caption}{size}</div>\n' +
+                    '</div>'
+            }
+        });
+        $('#thumbnail').on('filecleared', function (event) {
+            $('#thumbnail').fileinput('refresh', { caption: '添加图书图片' });
+        });
+        $('#thumbnail').on('fileerror', function (event, data, msg) {
+            console.log(JSON.stringify(data) + '🌹🌹🌹🌹🌹' + JSON.stringify(msg));
+        });
+        $('#thumbnail').on('fileuploaded', function (event, data, previewId, index) {
+            console.log("🌹🌹fileuploaded🌹🌹" + JSON.stringify(data.response));
+            vm.bookImg = data.response.data;
+            vm.sendForm(vm.postData);
+        });
+    });
+</script>
+
+<div class="container-fluid">
+    <div class="row">
+        <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+            <div class="sidebar-sticky">
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/home">
+                            <span data-feather="home"></span>
+                            书库
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">
+                            <span data-feather="file"></span>
+                            新建图书
+                            <span class="sr-only">(current)</span>
+                        </a>
+                    </li>
+                    <!-- <li class="nav-item">
+                        <a class="nav-link" href="/addArchive">
+                            <span data-feather="archive"></span>
+                            新建资讯
+                        </a>
+                    </li> -->
+                </ul>
+            </div>
+        </nav>
+
+        <main role="main" class="col-md-9 ml-sm-auto col-lg-10 pt-3 px-4">
+
+            <div class="container">
+                <div class="col">
+                    <div class="col-md-10">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h1 class="panel-title">
+                                    <span class="glyphicon glyphicon-user"></span> 创建图书</h1>
+                            </div>
+                            <div class="panel-body">
+                                <form id="product-form">
+                                    <div class="form-row">
+                                        <div class="form-group col-md-6">
+                                            <label class="col-form-label">书名</label>
+                                            <input type="text" maxlength="100" name="name" class="form-control" placeholder="书名" value="" required>
+                                        </div>
+                                        <div class="form-group col-md-6">
+                                            <label class="col-form-label">作者</label>
+                                            <input type="text" maxlength="100" name="author" class="form-control" placeholder="作者" value="" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group col-md-4">
+                                            <label class="col-form-label">出版社(可选)</label>
+                                            <input type="text" maxlength="100" name="publisher" class="form-control" placeholder="出版社" value="">
+                                        </div>
+                                        <div class="form-group col-md-4">
+                                            <label class="col-form-label">出版时间(可选)</label>
+                                            <input type="text" maxlength="10" id='publisher_date' name="publisher_date" class="form-control" placeholder="例：2018-02-26"
+                                                value="">
+                                        </div>
+                                        <div class="form-group col-md-4">
+                                            <label class="col-form-label">字数(可选)</label>
+                                            <input type="text" maxlength="11" name="words_num" class="form-control" placeholder="字数" value="" onkeyup="value=value.replace(/[^\d]/g,'')">
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group col-md-6">
+                                            <label for="category" class="col-form-label">分类</label>
+                                            <select class="form-control" id="category">
+                                                <option selected>请选择...</option>
+                                                <option>科幻武侠</option>
+                                                <option>历史小说</option>
+                                                <option>经济管理</option>
+                                                <option>人物传记</option>
+                                                <option>青春言情</option>
+                                                <option>新闻资讯</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group col-md-6">
+                                            <label for="book_type" class="col-form-label">类型</label>
+                                            <select class="form-control" id="book_type">
+                                                <option selected>请选择...</option>
+                                                <option>小说</option>
+                                                <option>听书</option>
+                                                <!-- <option>杂志</option>
+                                                <option>漫画</option> -->
+                                                <option>资讯</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="thumbnail" class="col-form-label">封面图片</label>
+                                        <input type="file" class="form-control-file" name="file" id="thumbnail" accept="image/*">
+                                    </div>
+                                    <div class="form-group" id="txtFileForm">
+                                        <label for="txtFile" class="col-form-label">图书txt文件</label>
+                                        <input type="file" class="form-control-file" name="file" id="txtFile" accept=".txt">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="col-form-label">简介</label>
+                                        <textarea class="form-control" maxlength="500" placeholder="字数最多500" style="resize: vertical;" id="introduction" rows="3"
+                                            required></textarea>
+                                    </div>
+                                    <div class="form-group" id="archive" style="display: none;">
+                                        <label class="col-form-label">资讯内容</label>
+                                        <div id="summernote"></div>
+                                    </div>
+                                    <div class="form-group">
+                                        <button type="submit" id="createBtn" class="btn btn-primary" data-loading-text="提交中...">创建</button>
+                                        <img id="myLoading" src="../static/images/loading.gif" style="display: none;height: 30px;width: 30px;margin-left: 10px;">
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+{% endblock %}

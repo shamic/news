@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../../../favicon.ico">
+
+    <title>Dashboard for EB</title>
+
+    <link rel="stylesheet" href="../static/css/summernote-bs4.css">
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet" href="../static/css/bootstrap.css">
+
+    <!-- Custom styles for this template -->
+    <link rel="stylesheet" href="../static/css/dashboard.css">
+
+    <script src="../static/js/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.js"></script>
+    <script src="../static/js/bootstrap.js"></script>
+    
+    <script>
+        $(function(){
+            const bean = localStorage.getItem('bean')
+            if (!bean || bean == 'null') {
+                window.location.href = '/login';
+            }
+        })
+    </script>
+  </head>
+
+  <body>
+    <nav class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0">
+      <a class="navbar-brand col-sm-3 col-md-2 mr-0" href="#">EB Dashboard</a>
+      <!-- <input class="form-control form-control-dark w-100" type="text" placeholder="Search" aria-label="Search"> -->
+      <ul class="navbar-nav px-3">
+        <li class="nav-item text-nowrap">
+          <a class="nav-link" href="/login">注销</a>
+        </li>
+      </ul>
+    </nav>
+
+    {% block main %} {% endblock %}
+
+    <!-- Modal -->
+    <div class="modal fade" id="myModel" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLongTitle">Tips</h5>
+                    <!-- <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button> -->
+                </div>
+                <div class="modal-body">
+
+                </div>
+                <div class="modal-footer">
+                    <!-- <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> -->
+                    <button type="button" class="btn btn-primary" data-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Icons -->
+    <script src="../static/js/feather.min.js"></script>
+    <script>
+      feather.replace()
+    </script>
+  </body>
+</html>
